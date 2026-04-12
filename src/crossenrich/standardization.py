@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Iterable
+from collections.abc import Iterable, Mapping
 
 import pandas as pd
 
@@ -22,13 +22,11 @@ SOURCE_ALIASES = {
     "WP": "WP",
 }
 
-TERM_REPLACEMENTS = {
+# Safe defaults only
+SAFE_TERM_REPLACEMENTS = {
     "signalling": "signaling",
     "organisation": "organization",
     "organisation of": "organization of",
-    "programmed cell death": "apoptosis",
-    "cell death": "apoptosis",
-    "p53 signaling pathway": "p53 pathway",
 }
 
 STOPWORDS = {
@@ -38,11 +36,6 @@ STOPWORDS = {
     "for",
     "in",
     "of",
-    "pathway",
-    "process",
-    "regulation",
-    "response",
-    "signaling",
     "the",
     "to",
     "via",
@@ -58,22 +51,76 @@ def normalize_source(source: str) -> str | None:
     return SOURCE_ALIASES.get(str(source).strip().upper())
 
 
-def standardize_term_name(name: str) -> str:
+def _clean_term_text(name: object) -> str:
     if pd.isna(name):
         return ""
     normalized = str(name).strip().lower()
-    for src, dst in TERM_REPLACEMENTS.items():
-        normalized = normalized.replace(src, dst)
     normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)
     normalized = re.sub(r"\s+", " ", normalized).strip()
     return normalized
 
 
-def tokenize_term(name: str) -> tuple[str, ...]:
+def _apply_term_replacements(
+    text: str,
+    replacements: Mapping[str, str] | None,
+) -> str:
+    if not text or not replacements:
+        return text
+
+    resolved = text
+    # Longest keys first so "programmed cell death" wins over "cell death"
+    for src, dst in sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True):
+        src_clean = _clean_term_text(src)
+        dst_clean = _clean_term_text(dst)
+        if not src_clean:
+            continue
+        pattern = re.compile(rf"(?<![a-z0-9]){re.escape(src_clean)}(?![a-z0-9])")
+        resolved = pattern.sub(dst_clean, resolved)
+
+    return re.sub(r"\s+", " ", resolved).strip()
+
+
+def _normalize_replacement_mapping(
+    replacements: Mapping[str, str] | None,
+) -> dict[str, str]:
+    if not replacements:
+        return {}
+    return {
+        standardize_term_name(src): standardize_term_name(dst)
+        for src, dst in replacements.items()
+        if standardize_term_name(src)
+    }
+
+
+def standardize_term_name(name: str) -> str:
+    normalized = _clean_term_text(name)
+    normalized = _apply_term_replacements(normalized, SAFE_TERM_REPLACEMENTS)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def resolve_term_name(
+    name: str,
+    *,
+    custom_replacements: Mapping[str, str] | None = None,
+) -> str:
     standardized = standardize_term_name(name)
-    if not standardized:
+    normalized_custom = _normalize_replacement_mapping(custom_replacements)
+    return _apply_term_replacements(standardized, normalized_custom)
+
+
+def _tokenize_standardized_text(text: str) -> tuple[str, ...]:
+    if not text:
         return tuple()
-    return tuple(token for token in standardized.split() if token not in STOPWORDS)
+    return tuple(token for token in text.split() if token not in STOPWORDS)
+
+
+def tokenize_term(
+    name: str,
+    *,
+    custom_replacements: Mapping[str, str] | None = None,
+) -> tuple[str, ...]:
+    resolved = resolve_term_name(name, custom_replacements=custom_replacements)
+    return _tokenize_standardized_text(resolved)
 
 
 def parse_gene_intersections(value: object) -> tuple[str, ...]:
@@ -119,6 +166,7 @@ def standardize_results_frame(
     allowed_sources: Iterable[str] = TARGET_SOURCES,
     min_p_value: float | None = None,
     significant_only: bool = True,
+    custom_term_replacements: Mapping[str, str] | None = None,
 ) -> pd.DataFrame:
     _require_columns(results, ("source", "name", "p_value"))
 
@@ -133,7 +181,13 @@ def standardize_results_frame(
         frame = frame[frame["p_value"] <= min_p_value].copy()
 
     frame["standardized_name"] = frame["name"].map(standardize_term_name)
-    frame["term_tokens"] = frame["name"].map(tokenize_term)
+    frame["resolved_name"] = frame["name"].map(
+        lambda value: resolve_term_name(
+            value,
+            custom_replacements=custom_term_replacements,
+        )
+    )
+    frame["term_tokens"] = frame["resolved_name"].map(_tokenize_standardized_text)
 
     gene_column = "intersections" if "intersections" in frame.columns else "intersection"
     if gene_column in frame.columns:
