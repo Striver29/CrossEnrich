@@ -29,6 +29,8 @@ SAFE_TERM_REPLACEMENTS = {
     "organisation of": "organization of",
 }
 
+USER_TERM_REPLACEMENTS: dict[str, str] = {}
+
 STOPWORDS = {
     "a",
     "an",
@@ -98,14 +100,24 @@ def standardize_term_name(name: str) -> str:
     return re.sub(r"\s+", " ", normalized).strip()
 
 
+def update_user_term_replacements(replacements: Mapping[str, str]) -> None:
+    USER_TERM_REPLACEMENTS.update(replacements)
+
+
+def clear_user_term_replacements() -> None:
+    USER_TERM_REPLACEMENTS.clear()
+
+
 def resolve_term_name(
     name: str,
     *,
     custom_replacements: Mapping[str, str] | None = None,
 ) -> str:
     standardized = standardize_term_name(name)
+    normalized_user = _normalize_replacement_mapping(USER_TERM_REPLACEMENTS)
     normalized_custom = _normalize_replacement_mapping(custom_replacements)
-    return _apply_term_replacements(standardized, normalized_custom)
+    resolved = _apply_term_replacements(standardized, normalized_user)
+    return _apply_term_replacements(resolved, normalized_custom)
 
 
 def _tokenize_standardized_text(text: str) -> tuple[str, ...]:

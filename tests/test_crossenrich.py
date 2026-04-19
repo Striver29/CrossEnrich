@@ -9,10 +9,12 @@ from src.crossenrich.semantic import (
     compute_semantic_similarity,
 )
 from src.crossenrich.standardization import (
+    clear_user_term_replacements,
     parse_parent_terms,
     parse_gene_intersections,
     standardize_results_frame,
     standardize_term_name,
+    update_user_term_replacements,
 )
 from src.crossenrich.validation import summarize_cluster_quality, validate_score_matrix
 
@@ -80,6 +82,19 @@ class CrossEnrichTests(unittest.TestCase):
             set(standardized["canonical_source"]),
             {"KEGG", "REAC", "GO:BP", "GO:MF"},
         )
+
+    def test_user_term_replacements_apply_to_resolved_names(self):
+        try:
+            update_user_term_replacements({"apoptosis": "cell death"})
+            standardized = standardize_results_frame(self.results)
+            apoptosis_row = standardized[
+                standardized["name"] == "Apoptosis"
+            ].iloc[0]
+            self.assertEqual(apoptosis_row["standardized_name"], "apoptosis")
+            self.assertEqual(apoptosis_row["resolved_name"], "cell death")
+            self.assertEqual(apoptosis_row["term_tokens"], ("cell", "death"))
+        finally:
+            clear_user_term_replacements()
 
     def test_compute_semantic_similarity(self):
         standardized = standardize_results_frame(self.results)

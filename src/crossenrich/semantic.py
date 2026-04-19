@@ -90,10 +90,10 @@ def compute_semantic_similarity(
     right: pd.Series,
     embeddings_cache,
     *,
-    token_weight: float = 0.20,
-    gene_weight: float = 0.40,
-    lexical_weight: float = 0.15,
-    semantic_weight: float = 0.25
+    token_weight: float = 0.35,
+    gene_weight: float = 0.10,
+    lexical_weight: float = 0.2,
+    semantic_weight: float = 0.35
 ) -> float:
     left_name = _comparison_name(left)
     right_name = _comparison_name(right)
@@ -160,10 +160,10 @@ def _cluster_label(cluster_frame: pd.DataFrame) -> str:
 def build_semantic_similarity_matrix(
     standardized: pd.DataFrame,
     *,
-    token_weight: float = 0.20,
-    gene_weight: float = 0.40,
-    lexical_weight: float = 0.15,
-    semantic_weight: float = 0.25,
+    token_weight: float = 0.35,
+    gene_weight: float = 0.10,
+    lexical_weight: float = 0.2,
+    semantic_weight: float = 0.35,
     cross_source_only: bool = True,
 ) -> pd.DataFrame:
     similarity = pd.DataFrame(
@@ -216,11 +216,11 @@ def cluster_terms(
     results: pd.DataFrame,
     *,
     allowed_sources: Iterable[str] = TARGET_SOURCES,
-    similarity_threshold: float = 0.5,
-    token_weight: float = 0.20,
-    gene_weight: float = 0.40,
-    lexical_weight: float = 0.15,
-    semantic_weight: float = 0.25,
+    similarity_threshold: float = 0.4,
+    token_weight: float = 0.35,
+    gene_weight: float = 0.10,
+    lexical_weight: float = 0.2,
+    semantic_weight: float = 0.35,
     cross_source_only: bool = True,
     method: str = "hierarchical",
     custom_term_replacements: Mapping[str, str] | None = None,
