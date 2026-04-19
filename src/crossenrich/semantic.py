@@ -12,7 +12,15 @@ import pandas as pd
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import squareform
 
-model = SentenceTransformer("allenai/specter")
+_MODEL_NAME = "allenai/specter"
+_MODEL: SentenceTransformer | None = None
+
+
+def get_embedding_model() -> SentenceTransformer:
+    global _MODEL
+    if _MODEL is None:
+        _MODEL = SentenceTransformer(_MODEL_NAME)
+    return _MODEL
 
 
 from .standardization import (
@@ -100,10 +108,12 @@ def compute_semantic_similarity(
 
     token_score = _geometric_containment(left["term_tokens"], right["term_tokens"])
     gene_score = _jaccard(left["intersection_genes"], right["intersection_genes"])
-    lexical_score = _trigram_jaccard(left["description"], right["description"])
+    left_description = left.get("description", "")
+    right_description = right.get("description", "")
+    lexical_score = _trigram_jaccard(left_description, right_description)
 
-    left_sem = _build_embedding_input(left["name"], left["description"])
-    right_sem = _build_embedding_input(right["name"], right["description"])
+    left_sem = _build_embedding_input(left["name"], left_description)
+    right_sem = _build_embedding_input(right["name"], right_description)
     semantic_score = _semantic_similarity(left_sem,right_sem, embeddings_cache)
     
     graph_score_sources = ["GO:BP", "GO:MF", "GO:CC"]
@@ -182,6 +192,7 @@ def build_semantic_similarity_matrix(
     ]
 
     unique_texts = list(dict.fromkeys(texts))
+    model = get_embedding_model()
     embeddings = model.encode(unique_texts)
 
     embeddings_cache = {
@@ -271,8 +282,9 @@ def cluster_terms(
         cross_source_only=cross_source_only,
     )
 
-    similarity_matrix = similarity_matrix.clip(lower=0.0, upper=1.0)
-    np.fill_diagonal(similarity_matrix.values, 1.0)
+    similarity_matrix = similarity_matrix.clip(lower=0.0, upper=1.0).copy()
+    for idx in similarity_matrix.index:
+        similarity_matrix.at[idx, idx] = 1.0
 
     best_scores = {}
     for index in similarity_matrix.index:
@@ -289,9 +301,9 @@ def cluster_terms(
         return clustered
 
     if method == "hierarchical":
-        distance_matrix = 1.0 - similarity_matrix
-        distance_matrix = distance_matrix.clip(lower=0.0, upper=1.0)
-        np.fill_diagonal(distance_matrix.values, 0.0)
+        distance_matrix = (1.0 - similarity_matrix).clip(lower=0.0, upper=1.0).copy()
+        for idx in distance_matrix.index:
+            distance_matrix.at[idx, idx] = 0.0
         condensed = squareform(distance_matrix.to_numpy(), checks=False)
         linkage_matrix = linkage(condensed, method="average")
         cluster_ids = fcluster(
