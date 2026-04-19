@@ -28,6 +28,8 @@ The notebook `notebooks/CrossEnrich_v0.ipynb` covers:
 
 The package layers are:
 
+- `baseline.py`
+  Baseline database comparison metrics, including direct term overlap, gene-level overlap, and Spearman rank correlation.
 - `standardization.py`
   Canonical source mapping, term normalization, optional manual term replacement, tokenization, gene-intersection parsing, parent-term parsing, and source-wise ranking.
 - `semantic.py`
@@ -40,7 +42,7 @@ The package layers are:
 1. Start with a gene list and run enrichment in `notebooks/CrossEnrich_v0.ipynb`.
 2. Filter the results to the selected databases and significant terms.
 3. Use the baseline metrics to inspect exact-name, gene-level, and rank-level agreement.
-4. Standardize the result table with `standardize_results_frame(...)`.
+4. Compute baseline database-agreement matrices from the standardized results.
 5. Build semantic similarity with `build_semantic_similarity_matrix(...)`.
 6. Cluster semantically related terms with `cluster_terms(...)`.
 7. Summarize source agreement with `build_cluster_consistency_matrix(...)`.

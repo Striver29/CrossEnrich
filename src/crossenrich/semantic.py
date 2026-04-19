@@ -12,6 +12,7 @@ import pandas as pd
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import squareform
 
+from .baseline import jaccard_score
 _MODEL_NAME = "allenai/specter"
 _MODEL: SentenceTransformer | None = None
 
@@ -29,15 +30,6 @@ from .standardization import (
     standardize_results_frame,
     _tokenize_standardized_text,
 )
-
-
-def _jaccard(items_a: Iterable[str], items_b: Iterable[str]) -> float:
-    set_a = set(items_a)
-    set_b = set(items_b)
-    union = set_a | set_b
-    if not union:
-        return 0.0
-    return len(set_a & set_b) / len(union)
 
 #less penalizing than jaccard and less rewarding than overlap containment
 def _geometric_containment(items_a: Iterable[str], items_b: Iterable[str]) -> float:
@@ -65,7 +57,7 @@ def _trigram_jaccard(left_text:str, right_text:str) -> float:
     left = _char_trigrams(left_text)
     right = _char_trigrams(right_text)
 
-    return _jaccard(left, right)
+    return jaccard_score(left, right)
 
 def _build_embedding_input(name:str, description:str) -> str:
     name = str(name).strip()
@@ -107,7 +99,7 @@ def compute_semantic_similarity(
     right_name = _comparison_name(right)
 
     token_score = _geometric_containment(left["term_tokens"], right["term_tokens"])
-    gene_score = _jaccard(left["intersection_genes"], right["intersection_genes"])
+    gene_score = jaccard_score(left["intersection_genes"], right["intersection_genes"])
     left_description = left.get("description", "")
     right_description = right.get("description", "")
     lexical_score = _trigram_jaccard(left_description, right_description)
@@ -119,7 +111,7 @@ def compute_semantic_similarity(
     graph_score_sources = ["GO:BP", "GO:MF", "GO:CC"]
 
     if left["canonical_source"] in graph_score_sources and right["canonical_source"] in graph_score_sources:
-        graph_score = _jaccard(left.get("parent_terms", ()), right.get("parent_terms", ()))
+        graph_score = jaccard_score(left.get("parent_terms", ()), right.get("parent_terms", ()))
     else:
         graph_score = 0.0
         graph_weight= 0.0
