@@ -11,6 +11,11 @@ from .baseline import (
     build_term_jaccard_matrix,
 )
 from .semantic import (
+    DEFAULT_GENE_WEIGHT,
+    DEFAULT_LEXICAL_WEIGHT,
+    DEFAULT_SEMANTIC_WEIGHT,
+    DEFAULT_SIMILARITY_THRESHOLD,
+    DEFAULT_TOKEN_WEIGHT,
     build_cluster_consistency_matrix,
     build_semantic_similarity_matrix,
     cluster_terms,
@@ -43,11 +48,11 @@ def run_crossenrich_pipeline(
     custom_term_replacements: Mapping[str, str] | None = None,
     gene_match_threshold: float = 0.5,
     spearman_min_pairs: int = 5,
-    semantic_similarity_threshold: float = 0.4,
-    token_weight: float = 0.35,
-    gene_weight: float = 0.10,
-    lexical_weight: float = 0.2,
-    semantic_weight: float = 0.35,
+    semantic_similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
+    token_weight: float = DEFAULT_TOKEN_WEIGHT,
+    gene_weight: float = DEFAULT_GENE_WEIGHT,
+    lexical_weight: float = DEFAULT_LEXICAL_WEIGHT,
+    semantic_weight: float = DEFAULT_SEMANTIC_WEIGHT,
     cross_source_only: bool = True,
     clustering_method: str = "hierarchical",
 ) -> CrossEnrichOutputs:

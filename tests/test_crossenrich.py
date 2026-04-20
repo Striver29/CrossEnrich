@@ -1,7 +1,16 @@
+import tempfile
 import unittest
 
 import pandas as pd
 
+from crossenrich.network import build_cluster_network, cluster_network_to_frame
+from crossenrich.pipeline import run_crossenrich_pipeline
+from crossenrich.reporting import (
+    build_database_pair_summary,
+    build_run_summary_row,
+    extract_top_consensus_clusters,
+)
+from crossenrich.visuals import save_default_visuals
 from crossenrich.semantic import (
     build_cluster_consistency_matrix,
     build_semantic_similarity_matrix,
@@ -135,6 +144,53 @@ class CrossEnrichTests(unittest.TestCase):
         clustered = cluster_terms(self.results, similarity_threshold=0.4)
         summary = summarize_cluster_quality(clustered)
         self.assertGreaterEqual(summary["multi_source_cluster_count"], 1)
+
+    def test_reporting_summaries(self):
+        outputs = run_crossenrich_pipeline(
+            self.results,
+            allowed_sources=("KEGG", "REAC", "GO:BP", "GO:MF"),
+            semantic_similarity_threshold=0.4,
+        )
+        pair_summary = build_database_pair_summary(outputs)
+        self.assertFalse(pair_summary.empty)
+        self.assertIn("cluster_consistency", pair_summary.columns)
+
+        top_clusters = extract_top_consensus_clusters(outputs.clustered_terms, top_n=5)
+        self.assertFalse(top_clusters.empty)
+        self.assertGreaterEqual(int(top_clusters.iloc[0]["source_count"]), 2)
+
+        run_summary = build_run_summary_row("toy", outputs)
+        self.assertEqual(run_summary["run_name"], "toy")
+        self.assertTrue(run_summary["cluster_matrix_valid"])
+
+    def test_save_default_visuals(self):
+        outputs = run_crossenrich_pipeline(
+            self.results,
+            allowed_sources=("KEGG", "REAC", "GO:BP", "GO:MF"),
+            semantic_similarity_threshold=0.4,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            saved_paths = save_default_visuals(outputs, temp_dir, prefix="toy")
+            self.assertEqual(
+                set(saved_paths),
+                {
+                    "cluster_network",
+                    "database_agreement_panels",
+                    "semantic_similarity",
+                    "top_consensus_clusters",
+                },
+            )
+
+    def test_cluster_network(self):
+        outputs = run_crossenrich_pipeline(
+            self.results,
+            allowed_sources=("KEGG", "REAC", "GO:BP", "GO:MF"),
+            semantic_similarity_threshold=0.4,
+        )
+        graph = build_cluster_network(outputs.clustered_terms, min_edge_weight=0.0)
+        summary = cluster_network_to_frame(graph)
+        self.assertGreaterEqual(graph.number_of_nodes(), 1)
+        self.assertFalse(summary.empty)
 
 
 if __name__ == "__main__":

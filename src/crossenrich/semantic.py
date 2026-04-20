@@ -16,6 +16,13 @@ from .baseline import jaccard_score
 _MODEL_NAME = "allenai/specter"
 _MODEL: SentenceTransformer | None = None
 
+# Benchmark-selected defaults from Benchmarks/weight_search_results.csv.
+DEFAULT_TOKEN_WEIGHT = 0.35
+DEFAULT_GENE_WEIGHT = 0.10
+DEFAULT_LEXICAL_WEIGHT = 0.20
+DEFAULT_SEMANTIC_WEIGHT = 0.35
+DEFAULT_SIMILARITY_THRESHOLD = 0.40
+
 
 def get_embedding_model() -> SentenceTransformer:
     global _MODEL
@@ -90,10 +97,10 @@ def compute_semantic_similarity(
     right: pd.Series,
     embeddings_cache,
     *,
-    token_weight: float = 0.35,
-    gene_weight: float = 0.10,
-    lexical_weight: float = 0.2,
-    semantic_weight: float = 0.35
+    token_weight: float = DEFAULT_TOKEN_WEIGHT,
+    gene_weight: float = DEFAULT_GENE_WEIGHT,
+    lexical_weight: float = DEFAULT_LEXICAL_WEIGHT,
+    semantic_weight: float = DEFAULT_SEMANTIC_WEIGHT,
 ) -> float:
     left_name = _comparison_name(left)
     right_name = _comparison_name(right)
@@ -162,10 +169,10 @@ def _cluster_label(cluster_frame: pd.DataFrame) -> str:
 def build_semantic_similarity_matrix(
     standardized: pd.DataFrame,
     *,
-    token_weight: float = 0.35,
-    gene_weight: float = 0.10,
-    lexical_weight: float = 0.2,
-    semantic_weight: float = 0.35,
+    token_weight: float = DEFAULT_TOKEN_WEIGHT,
+    gene_weight: float = DEFAULT_GENE_WEIGHT,
+    lexical_weight: float = DEFAULT_LEXICAL_WEIGHT,
+    semantic_weight: float = DEFAULT_SEMANTIC_WEIGHT,
     cross_source_only: bool = True,
 ) -> pd.DataFrame:
     similarity = pd.DataFrame(
@@ -219,11 +226,11 @@ def cluster_terms(
     results: pd.DataFrame,
     *,
     allowed_sources: Iterable[str] = TARGET_SOURCES,
-    similarity_threshold: float = 0.4,
-    token_weight: float = 0.35,
-    gene_weight: float = 0.10,
-    lexical_weight: float = 0.2,
-    semantic_weight: float = 0.35,
+    similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
+    token_weight: float = DEFAULT_TOKEN_WEIGHT,
+    gene_weight: float = DEFAULT_GENE_WEIGHT,
+    lexical_weight: float = DEFAULT_LEXICAL_WEIGHT,
+    semantic_weight: float = DEFAULT_SEMANTIC_WEIGHT,
     cross_source_only: bool = True,
     method: str = "hierarchical",
     custom_term_replacements: Mapping[str, str] | None = None,
