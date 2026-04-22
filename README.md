@@ -51,6 +51,7 @@ The package layers are:
 2. Filter the results to the selected databases and significant terms.
 3. Use the baseline metrics to inspect exact-name, gene-level, and rank-level agreement.
 4. Run `run_crossenrich_pipeline(...)` to build the baseline matrices, semantic similarity matrix, clustered terms, and cluster-consistency matrix with the benchmark-selected defaults.
+   These defaults are the intended starting point for normal use, since they were selected from the benchmark evaluation rather than hand-picked for one example run.
 5. Use `reporting.py` helpers to generate source-pair summaries, top consensus clusters, and run-level summary rows.
 6. Use `visuals.py` helpers to generate polished heatmaps and cluster summary plots.
 7. Optionally use the cluster-level network view to visualize how semantic clusters connect through shared genes.
