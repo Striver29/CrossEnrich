@@ -8,6 +8,7 @@ from crossenrich.pipeline import run_crossenrich_pipeline
 from crossenrich.reporting import (
     build_database_pair_summary,
     build_run_summary_row,
+    extract_source_specific_clusters,
     extract_top_consensus_clusters,
 )
 from crossenrich.visuals import save_default_visuals
@@ -154,10 +155,16 @@ class CrossEnrichTests(unittest.TestCase):
         pair_summary = build_database_pair_summary(outputs)
         self.assertFalse(pair_summary.empty)
         self.assertIn("cluster_consistency", pair_summary.columns)
+        self.assertIn("strongest_signal", pair_summary.columns)
 
         top_clusters = extract_top_consensus_clusters(outputs.clustered_terms, top_n=5)
         self.assertFalse(top_clusters.empty)
         self.assertGreaterEqual(int(top_clusters.iloc[0]["source_count"]), 2)
+        self.assertIn("representative_genes", top_clusters.columns)
+
+        source_specific = extract_source_specific_clusters(outputs.clustered_terms, top_n=5)
+        self.assertFalse(source_specific.empty)
+        self.assertIn("source", source_specific.columns)
 
         run_summary = build_run_summary_row("toy", outputs)
         self.assertEqual(run_summary["run_name"], "toy")
@@ -176,7 +183,7 @@ class CrossEnrichTests(unittest.TestCase):
                 {
                     "cluster_network",
                     "database_agreement_panels",
-                    "semantic_similarity",
+                    "source_pair_ranking",
                     "top_consensus_clusters",
                 },
             )
@@ -191,6 +198,21 @@ class CrossEnrichTests(unittest.TestCase):
         summary = cluster_network_to_frame(graph)
         self.assertGreaterEqual(graph.number_of_nodes(), 1)
         self.assertFalse(summary.empty)
+
+        filtered_graph = build_cluster_network(
+            outputs.clustered_terms,
+            selected_sources=("KEGG", "REAC"),
+            min_edge_weight=0.0,
+        )
+        filtered_summary = cluster_network_to_frame(filtered_graph)
+        self.assertGreaterEqual(filtered_graph.number_of_nodes(), 1)
+        self.assertFalse(filtered_summary.empty)
+        self.assertTrue(
+            filtered_summary["sources"].map(
+                lambda value: set(part.strip() for part in value.split(","))
+                .issubset({"KEGG", "REAC"})
+            ).all()
+        )
 
 
 if __name__ == "__main__":

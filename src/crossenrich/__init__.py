@@ -25,6 +25,7 @@ from .reporting import (
     build_database_pair_summary,
     build_run_summary_row,
     build_run_summary_table,
+    extract_source_specific_clusters,
     extract_top_consensus_clusters,
 )
 from .semantic import (
@@ -52,6 +53,7 @@ from .visuals import (
     plot_cluster_network,
     plot_database_agreement_panels,
     plot_score_heatmap,
+    plot_source_pair_ranking,
     plot_top_consensus_clusters,
     save_default_visuals,
 )
@@ -80,11 +82,13 @@ __all__ = [
     "compare_score_matrices",
     "compute_semantic_similarity",
     "extract_top_consensus_clusters",
+    "extract_source_specific_clusters",
     "gene_jaccard_score",
     "jaccard_score",
     "plot_cluster_network",
     "plot_database_agreement_panels",
     "plot_score_heatmap",
+    "plot_source_pair_ranking",
     "plot_top_consensus_clusters",
     "run_crossenrich_pipeline",
     "save_default_visuals",

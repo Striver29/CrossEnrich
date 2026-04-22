@@ -41,7 +41,7 @@ The package layers are:
 - `validation.py`
   Score-matrix validation, baseline-vs-semantic comparison, and cluster quality summaries.
 - `visuals.py`
-  Plotting helpers for source-agreement heatmaps, semantic similarity heatmaps, top consensus cluster charts, and a cluster-level network view.
+  Plotting helpers for source-agreement heatmaps, source-pair ranking, top consensus cluster charts, and a cluster-level network view.
 - `network.py`
   Cluster-level enrichment network construction based on shared supporting genes across multi-source clusters.
 

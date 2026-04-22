@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -9,7 +10,7 @@ import seaborn as sns
 
 from .network import build_cluster_network
 from .pipeline import CrossEnrichOutputs
-from .reporting import extract_top_consensus_clusters
+from .reporting import build_database_pair_summary, extract_top_consensus_clusters
 
 
 def plot_score_heatmap(
@@ -22,6 +23,7 @@ def plot_score_heatmap(
     annot: bool = True,
     figsize: tuple[float, float] = (7.0, 6.0),
 ):
+    """Plot a single score matrix as a reusable heatmap figure."""
     figure, axis = plt.subplots(figsize=figsize)
     sns.heatmap(
         matrix,
@@ -30,7 +32,7 @@ def plot_score_heatmap(
         cmap=cmap,
         vmin=vmin,
         vmax=vmax,
-        linewidths=0.5,
+        linewidths=0,
         ax=axis,
     )
     axis.set_title(title)
@@ -43,8 +45,11 @@ def plot_database_agreement_panels(
     *,
     figsize: tuple[float, float] = (14.0, 11.0),
 ):
+    """Show the four main agreement views in one summary figure."""
     figure, axes = plt.subplots(2, 2, figsize=figsize)
 
+    # These four panels are the main story: exact overlap, gene overlap,
+    # rank agreement, and semantic cluster agreement.
     panel_specs = [
         (outputs.term_jaccard_matrix, "Direct Term Overlap", "YlOrRd", 0.0, 1.0),
         (outputs.gene_jaccard_matrix, "Gene-Level Jaccard", "YlOrRd", 0.0, 1.0),
@@ -81,6 +86,7 @@ def plot_top_consensus_clusters(
     top_n: int = 10,
     figsize: tuple[float, float] = (10.0, 6.0),
 ):
+    """Visualize the largest multi-source clusters as shared biological themes."""
     summary = extract_top_consensus_clusters(clustered_terms, top_n=top_n)
     figure, axis = plt.subplots(figsize=figsize)
 
@@ -98,6 +104,7 @@ def plot_top_consensus_clusters(
         return figure, axis
 
     plot_frame = summary.iloc[::-1].copy()
+    # Plot largest consensus themes last-to-first so the biggest bar ends up on top.
     sns.barplot(
         data=plot_frame,
         x="term_count",
@@ -115,15 +122,52 @@ def plot_top_consensus_clusters(
     return figure, axis
 
 
+def plot_source_pair_ranking(
+    outputs: CrossEnrichOutputs,
+    *,
+    top_n: int = 10,
+    figsize: tuple[float, float] = (10.0, 6.0),
+):
+    """Rank source pairs by cluster-level agreement for a more readable summary view."""
+    summary = build_database_pair_summary(outputs).head(top_n).iloc[::-1].copy()
+    figure, axis = plt.subplots(figsize=figsize)
+
+    if summary.empty:
+        axis.text(0.5, 0.5, "No source-pair summary available.", ha="center", va="center")
+        axis.set_axis_off()
+        figure.tight_layout()
+        return figure, axis
+
+    sns.barplot(
+        data=summary,
+        x="cluster_consistency",
+        y="source_pair",
+        hue="strongest_signal",
+        dodge=False,
+        palette="Set2",
+        ax=axis,
+    )
+    axis.set_title("Top Source Pairs by Semantic Cluster Agreement")
+    axis.set_xlabel("Cluster consistency")
+    axis.set_ylabel("Source pair")
+    axis.legend(title="Strongest signal", loc="lower right")
+    figure.tight_layout()
+    return figure, axis
+
+
 def plot_cluster_network(
     clustered_terms: pd.DataFrame,
     *,
+    selected_sources: Iterable[str] | None = None,
     min_sources: int = 2,
     min_edge_weight: float = 0.15,
     figsize: tuple[float, float] = (12.0, 9.0),
+    max_labels: int = 15,
 ):
+    """Draw a cluster-level network where edges reflect shared supporting genes."""
     graph = build_cluster_network(
         clustered_terms,
+        selected_sources=selected_sources,
         min_sources=min_sources,
         min_edge_weight=min_edge_weight,
     )
@@ -143,14 +187,17 @@ def plot_cluster_network(
         return figure, axis
 
     positions = nx.spring_layout(graph, seed=42, weight="weight")
+    # Node size reflects how much evidence is inside a cluster.
     node_sizes = [
         250 + 120 * int(graph.nodes[node].get("term_count", 1))
         for node in graph.nodes
     ]
+    # Node color reflects how many sources support that cluster.
     node_colors = [
         int(graph.nodes[node].get("source_count", 1))
         for node in graph.nodes
     ]
+    # Edge width reflects shared-gene overlap between clusters.
     edge_widths = [
         1.0 + 6.0 * float(attrs.get("weight", 0.0))
         for _, _, attrs in graph.edges(data=True)
@@ -172,10 +219,22 @@ def plot_cluster_network(
         cmap=plt.cm.viridis,
         ax=axis,
     )
-    labels = {
-        node: graph.nodes[node].get("cluster_label", str(node))
-        for node in graph.nodes
-    }
+    ranked_nodes = sorted(
+        graph.nodes,
+        key=lambda node: (
+            graph.degree(node),
+            int(graph.nodes[node].get("source_count", 0)),
+            int(graph.nodes[node].get("term_count", 0)),
+        ),
+        reverse=True,
+    )
+    labeled_nodes = set(ranked_nodes[:max_labels])
+    labels = {}
+    for node in graph.nodes:
+        if node not in labeled_nodes:
+            continue
+        label = str(graph.nodes[node].get("cluster_label", str(node)))
+        labels[node] = label if len(label) <= 36 else f"{label[:33]}..."
     nx.draw_networkx_labels(
         graph,
         positions,
@@ -185,7 +244,11 @@ def plot_cluster_network(
     )
     colorbar = figure.colorbar(nodes, ax=axis, shrink=0.8)
     colorbar.set_label("Number of supporting sources")
-    axis.set_title("Cluster-Level Enrichment Network")
+    if selected_sources:
+        source_text = ", ".join(str(source) for source in selected_sources)
+        axis.set_title(f"Cluster-Level Enrichment Network ({source_text})")
+    else:
+        axis.set_title("Cluster-Level Enrichment Network")
     axis.set_axis_off()
     figure.tight_layout()
     return figure, axis
@@ -197,6 +260,7 @@ def save_default_visuals(
     *,
     prefix: str = "crossenrich",
 ) -> dict[str, str]:
+    """Save the default set of report-ready CrossEnrich figures to disk."""
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -208,19 +272,11 @@ def save_default_visuals(
     plt.close(agreement_figure)
     saved_paths["database_agreement_panels"] = str(agreement_path)
 
-    semantic_figure, _ = plot_score_heatmap(
-        outputs.semantic_similarity_matrix,
-        title="Semantic Similarity Matrix",
-        cmap="YlGnBu",
-        vmin=0.0,
-        vmax=1.0,
-        annot=False,
-        figsize=(10.0, 8.0),
-    )
-    semantic_path = output_path / f"{prefix}_semantic_similarity.png"
-    semantic_figure.savefig(semantic_path, dpi=200, bbox_inches="tight")
-    plt.close(semantic_figure)
-    saved_paths["semantic_similarity"] = str(semantic_path)
+    pair_figure, _ = plot_source_pair_ranking(outputs)
+    pair_path = output_path / f"{prefix}_source_pair_ranking.png"
+    pair_figure.savefig(pair_path, dpi=200, bbox_inches="tight")
+    plt.close(pair_figure)
+    saved_paths["source_pair_ranking"] = str(pair_path)
 
     clusters_figure, _ = plot_top_consensus_clusters(outputs.clustered_terms)
     clusters_path = output_path / f"{prefix}_top_consensus_clusters.png"

@@ -9,6 +9,7 @@ from .baseline import jaccard_score
 
 
 def _cluster_gene_set(cluster_frame: pd.DataFrame) -> tuple[str, ...]:
+    """Merge all supporting genes inside one cluster into a unique cluster gene set."""
     genes: list[str] = []
     for gene_tuple in cluster_frame.get("intersection_genes", pd.Series(dtype=object)):
         genes.extend(gene_tuple or ())
@@ -18,9 +19,11 @@ def _cluster_gene_set(cluster_frame: pd.DataFrame) -> tuple[str, ...]:
 def build_cluster_network(
     clustered_terms: pd.DataFrame,
     *,
+    selected_sources: Iterable[str] | None = None,
     min_sources: int = 2,
     min_edge_weight: float = 0.15,
 ) -> nx.Graph:
+    """Build a cluster-level graph, linking shared themes through gene overlap."""
     required = {"cluster_id", "cluster_label", "canonical_source"}
     if not required.issubset(clustered_terms.columns):
         missing = ", ".join(sorted(required - set(clustered_terms.columns)))
@@ -28,10 +31,23 @@ def build_cluster_network(
 
     graph = nx.Graph()
     cluster_summaries: dict[int, dict[str, object]] = {}
+    filtered_terms = clustered_terms.copy()
 
-    for cluster_id, cluster_frame in clustered_terms.groupby("cluster_id", sort=False):
+    if selected_sources is not None:
+        selected_source_set = {str(source) for source in selected_sources}
+        filtered_terms = filtered_terms[
+            filtered_terms["canonical_source"].isin(selected_source_set)
+        ].copy()
+    else:
+        selected_source_set = None
+
+    if filtered_terms.empty:
+        return graph
+
+    for cluster_id, cluster_frame in filtered_terms.groupby("cluster_id", sort=False):
         source_names = sorted(cluster_frame["canonical_source"].dropna().unique().tolist())
         source_count = len(source_names)
+        # The network is meant to show cross-database structure, so skip single-source clusters.
         if source_count < min_sources:
             continue
 
@@ -55,8 +71,10 @@ def build_cluster_network(
             "sources": source_names,
             "genes": cluster_genes,
             "mean_semantic_similarity": mean_semantic_similarity,
+            "selected_sources": sorted(selected_source_set) if selected_source_set else None,
         }
 
+        # Each node is a semantic cluster, not an individual enrichment term.
         graph.add_node(
             int(cluster_id),
             cluster_label=cluster_label,
@@ -65,6 +83,7 @@ def build_cluster_network(
             sources=source_names,
             genes=cluster_genes,
             mean_semantic_similarity=mean_semantic_similarity,
+            selected_sources=sorted(selected_source_set) if selected_source_set else None,
         )
 
     cluster_ids = list(cluster_summaries)
@@ -72,6 +91,7 @@ def build_cluster_network(
         left_summary = cluster_summaries[left_cluster_id]
         for right_cluster_id in cluster_ids[left_index + 1 :]:
             right_summary = cluster_summaries[right_cluster_id]
+            # Shared genes act as the biological bridge between otherwise separate clusters.
             weight = jaccard_score(left_summary["genes"], right_summary["genes"])
             if weight < min_edge_weight:
                 continue
@@ -86,6 +106,7 @@ def build_cluster_network(
 
 
 def cluster_network_to_frame(graph: nx.Graph) -> pd.DataFrame:
+    """Convert the cluster graph into a readable node summary table."""
     records: list[dict[str, object]] = []
     for node_id, attrs in graph.nodes(data=True):
         records.append(
