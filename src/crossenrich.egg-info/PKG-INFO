@@ -4,74 +4,104 @@ Version: 0.1.0
 Summary: Cross-database enrichment standardization and benchmarking utilities.
 Requires-Python: >=3.10
 Description-Content-Type: text/markdown
+Requires-Dist: numpy>=1.24
 Requires-Dist: pandas>=2.0
 Requires-Dist: scipy>=1.10
+Requires-Dist: scikit-learn>=1.3
+Requires-Dist: sentence-transformers>=3.0
+Requires-Dist: matplotlib>=3.8
+Requires-Dist: networkx>=3.2
+Requires-Dist: seaborn>=0.13
 
 # CrossEnrich
 
-CrossEnrich compares enrichment outputs across pathway and ontology databases, then adds a standardization layer so agreement is not limited to exact term-name matches.
+CrossEnrich compares enrichment outputs across pathway and ontology databases, then adds a standardization and semantic comparison layer so agreement is not limited to exact term-name matches.
 
 ## Repo layout
 
 - `src/crossenrich/`
-Reusable Python package for standardization, semantic matching, and validation.
+  Reusable Python package for standardization, semantic matching, clustering, and validation.
 - `notebooks/`
-Exploratory Colab-style notebooks. The current project notebook lives here.
+  Project notebooks. `notebooks/CrossEnrich_v0.ipynb` is the canonical workflow notebook.
+- `Benchmarks/`
+  Benchmark datasets, weight-search code, and saved evaluation outputs.
 - `tests/`
-Unit tests for the reusable package.
-- `examples/`
-Small example inputs such as benchmark gene lists or exported result tables.
+  Unit tests for the reusable package.
 - `results/`
-Generated outputs such as matrices, heatmaps, and benchmark summaries.
+  Generated outputs such as matrices, heatmaps, and benchmark summaries.
 
 ## Current implementation
 
-The notebook `notebooks/CrossEnrich_v0.ipynb` already covers:
+The notebook `notebooks/CrossEnrich_v0.ipynb` covers:
 
 - g:Profiler retrieval
 - source filtering
 - direct term-name Jaccard
 - gene-level Jaccard
 - Spearman rank correlation
+- package-based semantic similarity, clustering, and validation
 
-The package adds the missing next layers:
+The package layers are:
 
+- `baseline.py`
+  Baseline database comparison metrics, including direct term overlap, gene-level overlap, and Spearman rank correlation.
+- `pipeline.py`
+  The package-level workflow wrapper that runs standardization, baseline metrics, semantic similarity, clustering, and validation in one consistent sequence.
+- `reporting.py`
+  User-facing summary tables for source pairs, top consensus clusters, and benchmark/run summaries.
 - `standardization.py`
-Canonical source mapping, term normalization, tokenization, gene-intersection parsing, parent-term parsing, and source-wise ranking.
+  Canonical source mapping, term normalization, optional manual term replacement, tokenization, gene-intersection parsing, parent-term parsing, and source-wise ranking.
 - `semantic.py`
-Cross-database semantic similarity using weighted lexical, token, gene, and parent-term overlap, plus hierarchical clustering and a cluster-level consistency matrix.
+  Hybrid semantic similarity built from geometric token containment, gene Jaccard, trigram lexical similarity, and SPECTER embedding similarity, followed by clustering and a cluster-level consistency matrix. The current defaults are benchmark-selected from `Benchmarks/weight_search_results.csv`: token `0.35`, gene `0.10`, lexical `0.20`, semantic `0.35`, threshold `0.40`.
 - `validation.py`
-Score-matrix validation, baseline-vs-semantic comparison, and cluster quality summaries.
+  Score-matrix validation, baseline-vs-semantic comparison, and cluster quality summaries.
+- `visuals.py`
+  Plotting helpers for source-agreement heatmaps, source-pair ranking, top consensus cluster charts, and a cluster-level network view.
+- `network.py`
+  Cluster-level enrichment network construction based on shared supporting genes across multi-source clusters.
 
 ## Suggested workflow
 
-1. Use the notebook to fetch enrichment results from g:Profiler.
-2. Export the result table into a pandas DataFrame.
-3. Pass that DataFrame into `standardize_results_frame(...)`.
-4. Build semantic clusters with `cluster_terms(...)`.
-5. Compare baseline matrices against semantic cluster consistency.
-6. Validate the resulting matrices before plotting or reporting them.
+1. Start with a gene list and run enrichment in `notebooks/CrossEnrich_v0.ipynb`.
+2. Filter the results to the selected databases and significant terms.
+3. Use the baseline metrics to inspect exact-name, gene-level, and rank-level agreement.
+4. Run `run_crossenrich_pipeline(...)` to build the baseline matrices, semantic similarity matrix, clustered terms, and cluster-consistency matrix with the benchmark-selected defaults.
+   These defaults are the intended starting point for normal use, since they were selected from the benchmark evaluation rather than hand-picked for one example run.
+5. Use `reporting.py` helpers to generate source-pair summaries, top consensus clusters, and run-level summary rows.
+6. Use `visuals.py` helpers to generate polished heatmaps and cluster summary plots.
+7. Optionally use the cluster-level network view to visualize how semantic clusters connect through shared genes.
+8. Validate the outputs before exporting or reporting them.
 
 ## Example
 
 ```python
 import pandas as pd
 
-from crossenrich.semantic import build_cluster_consistency_matrix, cluster_terms
-from crossenrich.standardization import standardize_results_frame
-from crossenrich.validation import summarize_cluster_quality, validate_score_matrix
+from crossenrich import (
+    build_database_pair_summary,
+    extract_top_consensus_clusters,
+    run_crossenrich_pipeline,
+    save_default_visuals,
+)
 
 results = pd.read_csv("your_gprofiler_results.csv")
-standardized = standardize_results_frame(results)
-clustered = cluster_terms(standardized)
-semantic_matrix = build_cluster_consistency_matrix(clustered)
-validation = validate_score_matrix(
-    semantic_matrix,
-    expected_min=0.0,
-    expected_max=1.0,
-    diagonal_mode="one",
-)
-summary = summarize_cluster_quality(clustered)
+outputs = run_crossenrich_pipeline(results)
+pair_summary = build_database_pair_summary(outputs)
+top_clusters = extract_top_consensus_clusters(outputs.clustered_terms, top_n=10)
+saved_paths = save_default_visuals(outputs, "results")
+```
+
+CLI example:
+
+```bash
+crossenrich use-gmt notebooks/HALLMARK_OXIDATIVE_PHOSPHORYLATION.v2026.1.Hs.gmt --gene-set-name HALLMARK_OXIDATIVE_PHOSPHORYLATION
+crossenrich all
+crossenrich run-summary
+crossenrich pair-summary
+crossenrich cluster-network
+crossenrich selected-source-network --network-sources KEGG REAC
+crossenrich status
+crossenrich clear
 ```
 
 Run tests with:
@@ -82,7 +112,4 @@ python3 -m unittest discover -s tests -v
 
 ## Remaining work
 
-- wire the notebook to import the package directly
-- generate polished heatmaps and benchmark reports from the validated matrices
-- test across multiple benchmark gene sets
-- decide whether `WP` stays in scope or the project remains limited to GO, KEGG, and Reactome
+- add one or two polished biological cluster case studies to the final report

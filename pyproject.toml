@@ -19,6 +19,9 @@ dependencies = [
     "seaborn>=0.13",
 ]
 
+[project.scripts]
+crossenrich = "crossenrich.cli:main"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 

@@ -1,10 +1,23 @@
+import os
 import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
+from crossenrich.cli import (
+    artifact_command,
+    build_parser,
+    clean_results_command,
+    clear_command,
+    run_command,
+    run_gmt_command,
+    status_command,
+    use_gmt_command,
+)
 from crossenrich.network import build_cluster_network, cluster_network_to_frame
-from crossenrich.pipeline import run_crossenrich_pipeline
+from crossenrich.pipeline import CrossEnrichOutputs, run_crossenrich_pipeline
 from crossenrich.reporting import (
     build_database_pair_summary,
     build_run_summary_row,
@@ -213,6 +226,702 @@ class CrossEnrichTests(unittest.TestCase):
                 .issubset({"KEGG", "REAC"})
             ).all()
         )
+
+    def test_cli_run_command_with_mocks(self):
+        parser = build_parser()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir) / "toy.csv"
+            self.results.to_csv(input_path, index=False)
+
+            standardized = standardize_results_frame(self.results)
+            results_by_source = {
+                "KEGG": standardized[standardized["canonical_source"] == "KEGG"].copy(),
+                "REAC": standardized[standardized["canonical_source"] == "REAC"].copy(),
+            }
+            clustered = pd.DataFrame(
+                [
+                    {
+                        "canonical_source": "KEGG",
+                        "name": "Apoptosis",
+                        "standardized_name": "apoptosis",
+                        "cluster_id": 0,
+                        "cluster_label": "cell death",
+                        "semantic_similarity_max": 0.8,
+                        "intersection_genes": ("TP53", "BAX", "CASP3"),
+                    },
+                    {
+                        "canonical_source": "REAC",
+                        "name": "Programmed cell death",
+                        "standardized_name": "programmed cell death",
+                        "cluster_id": 0,
+                        "cluster_label": "cell death",
+                        "semantic_similarity_max": 0.8,
+                        "intersection_genes": ("TP53", "BAX", "CASP3"),
+                    },
+                ]
+            )
+            matrix = pd.DataFrame(
+                [[1.0, 0.6], [0.6, 1.0]],
+                index=["KEGG", "REAC"],
+                columns=["KEGG", "REAC"],
+            )
+            semantic_matrix = pd.DataFrame(
+                [[1.0, 0.7], [0.7, 1.0]],
+                index=[0, 1],
+                columns=[0, 1],
+            )
+            fake_outputs = CrossEnrichOutputs(
+                standardized_results=standardized,
+                results_by_source=results_by_source,
+                term_jaccard_matrix=matrix,
+                gene_jaccard_matrix=matrix,
+                spearman_matrix=matrix,
+                semantic_similarity_matrix=semantic_matrix,
+                clustered_terms=clustered,
+                cluster_consistency_matrix=matrix,
+                cluster_consistency_validation={"is_valid": True},
+                cluster_summary={
+                    "term_count": 2,
+                    "cluster_count": 1,
+                    "singleton_cluster_count": 0,
+                    "multi_source_cluster_count": 1,
+                    "mean_cluster_size": 2.0,
+                },
+                semantic_minus_gene_matrix=matrix,
+            )
+
+            args = parser.parse_args(
+                [
+                    "run",
+                    str(input_path),
+                    "all",
+                    "--output-dir",
+                    temp_dir,
+                    "--summaries",
+                    "run_summary",
+                    "--plots",
+                    "selected_source_network",
+                    "--network-sources",
+                    "KEGG",
+                    "REAC",
+                ]
+            )
+
+            with patch("crossenrich.cli.run_crossenrich_pipeline", return_value=fake_outputs), patch(
+                "crossenrich.cli.plot_cluster_network"
+            ) as mock_plot:
+                figure = unittest.mock.MagicMock()
+                axis = unittest.mock.MagicMock()
+                mock_plot.return_value = (figure, axis)
+                exit_code = run_command(args)
+
+            self.assertEqual(exit_code, 0)
+            figure.savefig.assert_called_once()
+            self.assertTrue((Path(temp_dir) / "crossenrich_run_summary.csv").exists())
+            self.assertFalse((Path(temp_dir) / "crossenrich_database_pair_summary.csv").exists())
+
+    def test_cli_run_gmt_command_with_mocks(self):
+        parser = build_parser()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            gmt_path = Path(temp_dir) / "toy.gmt"
+            gmt_path.write_text(
+                "HALLMARK_OXIDATIVE_PHOSPHORYLATION\tdesc\tTP53\tBAX\tCASP3\n"
+            )
+
+            standardized = standardize_results_frame(self.results)
+            results_by_source = {
+                "KEGG": standardized[standardized["canonical_source"] == "KEGG"].copy(),
+                "REAC": standardized[standardized["canonical_source"] == "REAC"].copy(),
+            }
+            clustered = pd.DataFrame(
+                [
+                    {
+                        "canonical_source": "KEGG",
+                        "name": "Apoptosis",
+                        "standardized_name": "apoptosis",
+                        "cluster_id": 0,
+                        "cluster_label": "cell death",
+                        "semantic_similarity_max": 0.8,
+                        "intersection_genes": ("TP53", "BAX", "CASP3"),
+                    },
+                    {
+                        "canonical_source": "REAC",
+                        "name": "Programmed cell death",
+                        "standardized_name": "programmed cell death",
+                        "cluster_id": 0,
+                        "cluster_label": "cell death",
+                        "semantic_similarity_max": 0.8,
+                        "intersection_genes": ("TP53", "BAX", "CASP3"),
+                    },
+                ]
+            )
+            matrix = pd.DataFrame(
+                [[1.0, 0.6], [0.6, 1.0]],
+                index=["KEGG", "REAC"],
+                columns=["KEGG", "REAC"],
+            )
+            semantic_matrix = pd.DataFrame(
+                [[1.0, 0.7], [0.7, 1.0]],
+                index=[0, 1],
+                columns=[0, 1],
+            )
+            fake_outputs = CrossEnrichOutputs(
+                standardized_results=standardized,
+                results_by_source=results_by_source,
+                term_jaccard_matrix=matrix,
+                gene_jaccard_matrix=matrix,
+                spearman_matrix=matrix,
+                semantic_similarity_matrix=semantic_matrix,
+                clustered_terms=clustered,
+                cluster_consistency_matrix=matrix,
+                cluster_consistency_validation={"is_valid": True},
+                cluster_summary={
+                    "term_count": 2,
+                    "cluster_count": 1,
+                    "singleton_cluster_count": 0,
+                    "multi_source_cluster_count": 1,
+                    "mean_cluster_size": 2.0,
+                },
+                semantic_minus_gene_matrix=matrix,
+            )
+
+            args = parser.parse_args(
+                [
+                    "run-gmt",
+                    str(gmt_path),
+                    "all",
+                    "--output-dir",
+                    temp_dir,
+                    "--gene-set-name",
+                    "HALLMARK_OXIDATIVE_PHOSPHORYLATION",
+                    "--summaries",
+                    "database_pair_summary",
+                    "--plots",
+                    "source_pair_ranking",
+                ]
+            )
+
+            with patch(
+                "crossenrich.cli._run_enrichment_from_genes",
+                return_value=self.results,
+            ), patch(
+                "crossenrich.cli.run_crossenrich_pipeline",
+                return_value=fake_outputs,
+            ), patch(
+                "crossenrich.cli.plot_source_pair_ranking"
+            ) as mock_plot:
+                figure = unittest.mock.MagicMock()
+                axis = unittest.mock.MagicMock()
+                mock_plot.return_value = (figure, axis)
+                exit_code = run_gmt_command(args)
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue((Path(temp_dir) / "crossenrich_gprofiler_results.csv").exists())
+            self.assertTrue((Path(temp_dir) / "crossenrich_database_pair_summary.csv").exists())
+            figure.savefig.assert_called_once()
+            self.assertFalse((Path(temp_dir) / "crossenrich_run_summary.csv").exists())
+
+    def test_cli_gmt_artifact_alias_with_mocks(self):
+        parser = build_parser()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            gmt_path = Path(temp_dir) / "toy.gmt"
+            gmt_path.write_text(
+                "HALLMARK_OXIDATIVE_PHOSPHORYLATION\tdesc\tTP53\tBAX\tCASP3\n"
+            )
+
+            standardized = standardize_results_frame(self.results)
+            results_by_source = {
+                "KEGG": standardized[standardized["canonical_source"] == "KEGG"].copy(),
+                "REAC": standardized[standardized["canonical_source"] == "REAC"].copy(),
+            }
+            clustered = pd.DataFrame(
+                [
+                    {
+                        "canonical_source": "KEGG",
+                        "name": "Apoptosis",
+                        "standardized_name": "apoptosis",
+                        "cluster_id": 0,
+                        "cluster_label": "cell death",
+                        "semantic_similarity_max": 0.8,
+                        "intersection_genes": ("TP53", "BAX", "CASP3"),
+                    },
+                    {
+                        "canonical_source": "REAC",
+                        "name": "Programmed cell death",
+                        "standardized_name": "programmed cell death",
+                        "cluster_id": 0,
+                        "cluster_label": "cell death",
+                        "semantic_similarity_max": 0.8,
+                        "intersection_genes": ("TP53", "BAX", "CASP3"),
+                    },
+                ]
+            )
+            matrix = pd.DataFrame(
+                [[1.0, 0.6], [0.6, 1.0]],
+                index=["KEGG", "REAC"],
+                columns=["KEGG", "REAC"],
+            )
+            semantic_matrix = pd.DataFrame(
+                [[1.0, 0.7], [0.7, 1.0]],
+                index=[0, 1],
+                columns=[0, 1],
+            )
+            fake_outputs = CrossEnrichOutputs(
+                standardized_results=standardized,
+                results_by_source=results_by_source,
+                term_jaccard_matrix=matrix,
+                gene_jaccard_matrix=matrix,
+                spearman_matrix=matrix,
+                semantic_similarity_matrix=semantic_matrix,
+                clustered_terms=clustered,
+                cluster_consistency_matrix=matrix,
+                cluster_consistency_validation={"is_valid": True},
+                cluster_summary={
+                    "term_count": 2,
+                    "cluster_count": 1,
+                    "singleton_cluster_count": 0,
+                    "multi_source_cluster_count": 1,
+                    "mean_cluster_size": 2.0,
+                },
+                semantic_minus_gene_matrix=matrix,
+            )
+
+            args = parser.parse_args(
+                [
+                    "gmt",
+                    str(gmt_path),
+                    "run-summary",
+                    "--output-dir",
+                    temp_dir,
+                    "--gene-set-name",
+                    "HALLMARK_OXIDATIVE_PHOSPHORYLATION",
+                    "--no-plots",
+                ]
+            )
+
+            with patch(
+                "crossenrich.cli._run_enrichment_from_genes",
+                return_value=self.results,
+            ), patch(
+                "crossenrich.cli.run_crossenrich_pipeline",
+                return_value=fake_outputs,
+            ):
+                exit_code = run_gmt_command(args)
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue((Path(temp_dir) / "crossenrich_run_summary.csv").exists())
+            self.assertFalse((Path(temp_dir) / "crossenrich_database_pair_summary.csv").exists())
+
+    def test_cli_run_gmt_all_does_not_require_network_sources(self):
+        parser = build_parser()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            gmt_path = Path(temp_dir) / "toy.gmt"
+            gmt_path.write_text(
+                "HALLMARK_OXIDATIVE_PHOSPHORYLATION\tdesc\tTP53\tBAX\tCASP3\n"
+            )
+
+            standardized = standardize_results_frame(self.results)
+            results_by_source = {
+                "KEGG": standardized[standardized["canonical_source"] == "KEGG"].copy(),
+                "REAC": standardized[standardized["canonical_source"] == "REAC"].copy(),
+            }
+            clustered = pd.DataFrame(
+                [
+                    {
+                        "canonical_source": "KEGG",
+                        "name": "Apoptosis",
+                        "standardized_name": "apoptosis",
+                        "cluster_id": 0,
+                        "cluster_label": "cell death",
+                        "semantic_similarity_max": 0.8,
+                        "intersection_genes": ("TP53", "BAX", "CASP3"),
+                    },
+                    {
+                        "canonical_source": "REAC",
+                        "name": "Programmed cell death",
+                        "standardized_name": "programmed cell death",
+                        "cluster_id": 0,
+                        "cluster_label": "cell death",
+                        "semantic_similarity_max": 0.8,
+                        "intersection_genes": ("TP53", "BAX", "CASP3"),
+                    },
+                ]
+            )
+            matrix = pd.DataFrame(
+                [[1.0, 0.6], [0.6, 1.0]],
+                index=["KEGG", "REAC"],
+                columns=["KEGG", "REAC"],
+            )
+            semantic_matrix = pd.DataFrame(
+                [[1.0, 0.7], [0.7, 1.0]],
+                index=[0, 1],
+                columns=[0, 1],
+            )
+            fake_outputs = CrossEnrichOutputs(
+                standardized_results=standardized,
+                results_by_source=results_by_source,
+                term_jaccard_matrix=matrix,
+                gene_jaccard_matrix=matrix,
+                spearman_matrix=matrix,
+                semantic_similarity_matrix=semantic_matrix,
+                clustered_terms=clustered,
+                cluster_consistency_matrix=matrix,
+                cluster_consistency_validation={"is_valid": True},
+                cluster_summary={
+                    "term_count": 2,
+                    "cluster_count": 1,
+                    "singleton_cluster_count": 0,
+                    "multi_source_cluster_count": 1,
+                    "mean_cluster_size": 2.0,
+                },
+                semantic_minus_gene_matrix=matrix,
+            )
+
+            args = parser.parse_args(
+                [
+                    "gmt",
+                    str(gmt_path),
+                    "--output-dir",
+                    temp_dir,
+                ]
+            )
+
+            with patch(
+                "crossenrich.cli._run_enrichment_from_genes",
+                return_value=self.results,
+            ), patch(
+                "crossenrich.cli.run_crossenrich_pipeline",
+                return_value=fake_outputs,
+            ), patch("crossenrich.cli.plot_database_agreement_panels") as mock_agreement, patch(
+                "crossenrich.cli.plot_source_pair_ranking"
+            ) as mock_pairs, patch(
+                "crossenrich.cli.plot_top_consensus_clusters"
+            ) as mock_clusters, patch(
+                "crossenrich.cli.plot_cluster_network"
+            ) as mock_network:
+                for mocked in (mock_agreement, mock_pairs, mock_clusters, mock_network):
+                    mocked.return_value = (unittest.mock.MagicMock(), unittest.mock.MagicMock())
+                exit_code = run_gmt_command(args)
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue((Path(temp_dir) / "crossenrich_run_summary.csv").exists())
+            self.assertTrue((Path(temp_dir) / "crossenrich_database_pair_summary.csv").exists())
+
+    def test_cli_use_gmt_then_artifact_command_with_mocks(self):
+        parser = build_parser()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            gmt_path = temp_path / "toy.gmt"
+            gmt_path.write_text(
+                "HALLMARK_OXIDATIVE_PHOSPHORYLATION\tdesc\tTP53\tBAX\tCASP3\n"
+            )
+
+            standardized = standardize_results_frame(self.results)
+            results_by_source = {
+                "KEGG": standardized[standardized["canonical_source"] == "KEGG"].copy(),
+                "REAC": standardized[standardized["canonical_source"] == "REAC"].copy(),
+            }
+            clustered = pd.DataFrame(
+                [
+                    {
+                        "canonical_source": "KEGG",
+                        "name": "Apoptosis",
+                        "standardized_name": "apoptosis",
+                        "cluster_id": 0,
+                        "cluster_label": "cell death",
+                        "semantic_similarity_max": 0.8,
+                        "intersection_genes": ("TP53", "BAX", "CASP3"),
+                    },
+                    {
+                        "canonical_source": "REAC",
+                        "name": "Programmed cell death",
+                        "standardized_name": "programmed cell death",
+                        "cluster_id": 0,
+                        "cluster_label": "cell death",
+                        "semantic_similarity_max": 0.8,
+                        "intersection_genes": ("TP53", "BAX", "CASP3"),
+                    },
+                ]
+            )
+            matrix = pd.DataFrame(
+                [[1.0, 0.6], [0.6, 1.0]],
+                index=["KEGG", "REAC"],
+                columns=["KEGG", "REAC"],
+            )
+            semantic_matrix = pd.DataFrame(
+                [[1.0, 0.7], [0.7, 1.0]],
+                index=[0, 1],
+                columns=[0, 1],
+            )
+            fake_outputs = CrossEnrichOutputs(
+                standardized_results=standardized,
+                results_by_source=results_by_source,
+                term_jaccard_matrix=matrix,
+                gene_jaccard_matrix=matrix,
+                spearman_matrix=matrix,
+                semantic_similarity_matrix=semantic_matrix,
+                clustered_terms=clustered,
+                cluster_consistency_matrix=matrix,
+                cluster_consistency_validation={"is_valid": True},
+                cluster_summary={
+                    "term_count": 2,
+                    "cluster_count": 1,
+                    "singleton_cluster_count": 0,
+                    "multi_source_cluster_count": 1,
+                    "mean_cluster_size": 2.0,
+                },
+                semantic_minus_gene_matrix=matrix,
+            )
+
+            cwd_before = Path.cwd()
+            try:
+                os.chdir(temp_dir)
+                use_args = parser.parse_args(
+                    [
+                        "use-gmt",
+                        str(gmt_path),
+                        "--gene-set-name",
+                        "HALLMARK_OXIDATIVE_PHOSPHORYLATION",
+                    ]
+                )
+                with patch(
+                    "crossenrich.cli._run_enrichment_from_genes",
+                    return_value=self.results,
+                ), patch(
+                    "crossenrich.cli.run_crossenrich_pipeline",
+                    return_value=fake_outputs,
+                ):
+                    exit_code = use_gmt_command(use_args)
+                self.assertEqual(exit_code, 0)
+                self.assertTrue((temp_path / ".crossenrich_state.json").exists())
+                self.assertTrue((temp_path / ".crossenrich_cache" / "outputs.pkl").exists())
+
+                artifact_args = parser.parse_args(["cluster-network"])
+                with patch("crossenrich.cli.plot_cluster_network") as mock_plot:
+                    figure = unittest.mock.MagicMock()
+                    axis = unittest.mock.MagicMock()
+                    mock_plot.return_value = (figure, axis)
+                    artifact_exit = artifact_command(artifact_args)
+                self.assertEqual(artifact_exit, 0)
+                figure.savefig.assert_called_once()
+
+                status_exit = status_command(artifact_args)
+                self.assertEqual(status_exit, 0)
+
+                clear_exit = clear_command(artifact_args)
+                self.assertEqual(clear_exit, 0)
+                self.assertFalse((temp_path / ".crossenrich_state.json").exists())
+                self.assertFalse((temp_path / ".crossenrich_cache").exists())
+            finally:
+                os.chdir(cwd_before)
+
+    def test_cli_all_visuals_artifact_includes_semantic_similarity_plot(self):
+        parser = build_parser()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            gmt_path = temp_path / "toy.gmt"
+            gmt_path.write_text(
+                "HALLMARK_OXIDATIVE_PHOSPHORYLATION\tdesc\tTP53\tBAX\tCASP3\n"
+            )
+
+            standardized = standardize_results_frame(self.results)
+            results_by_source = {
+                "KEGG": standardized[standardized["canonical_source"] == "KEGG"].copy(),
+                "REAC": standardized[standardized["canonical_source"] == "REAC"].copy(),
+            }
+            clustered = pd.DataFrame(
+                [
+                    {
+                        "canonical_source": "KEGG",
+                        "name": "Apoptosis",
+                        "standardized_name": "apoptosis",
+                        "cluster_id": 0,
+                        "cluster_label": "cell death",
+                        "semantic_similarity_max": 0.8,
+                        "intersection_genes": ("TP53", "BAX", "CASP3"),
+                    },
+                    {
+                        "canonical_source": "REAC",
+                        "name": "Programmed cell death",
+                        "standardized_name": "programmed cell death",
+                        "cluster_id": 0,
+                        "cluster_label": "cell death",
+                        "semantic_similarity_max": 0.8,
+                        "intersection_genes": ("TP53", "BAX", "CASP3"),
+                    },
+                ]
+            )
+            matrix = pd.DataFrame(
+                [[1.0, 0.6], [0.6, 1.0]],
+                index=["KEGG", "REAC"],
+                columns=["KEGG", "REAC"],
+            )
+            semantic_matrix = pd.DataFrame(
+                [[1.0, 0.7], [0.7, 1.0]],
+                index=[0, 1],
+                columns=[0, 1],
+            )
+            fake_outputs = CrossEnrichOutputs(
+                standardized_results=standardized,
+                results_by_source=results_by_source,
+                term_jaccard_matrix=matrix,
+                gene_jaccard_matrix=matrix,
+                spearman_matrix=matrix,
+                semantic_similarity_matrix=semantic_matrix,
+                clustered_terms=clustered,
+                cluster_consistency_matrix=matrix,
+                cluster_consistency_validation={"is_valid": True},
+                cluster_summary={
+                    "term_count": 2,
+                    "cluster_count": 1,
+                    "singleton_cluster_count": 0,
+                    "multi_source_cluster_count": 1,
+                    "mean_cluster_size": 2.0,
+                },
+                semantic_minus_gene_matrix=matrix,
+            )
+
+            cwd_before = Path.cwd()
+            try:
+                os.chdir(temp_dir)
+                use_args = parser.parse_args(
+                    [
+                        "use-gmt",
+                        str(gmt_path),
+                        "--gene-set-name",
+                        "HALLMARK_OXIDATIVE_PHOSPHORYLATION",
+                    ]
+                )
+                with patch(
+                    "crossenrich.cli._run_enrichment_from_genes",
+                    return_value=self.results,
+                ), patch(
+                    "crossenrich.cli.run_crossenrich_pipeline",
+                    return_value=fake_outputs,
+                ):
+                    self.assertEqual(use_gmt_command(use_args), 0)
+
+                artifact_args = parser.parse_args(["all-visuals"])
+                with patch("crossenrich.cli.plot_database_agreement_panels") as mock_agreement, patch(
+                    "crossenrich.cli.plot_source_pair_ranking"
+                ) as mock_pairs, patch(
+                    "crossenrich.cli.plot_top_consensus_clusters"
+                ) as mock_clusters, patch(
+                    "crossenrich.cli.plot_cluster_network"
+                ) as mock_network, patch(
+                    "crossenrich.cli.plot_score_heatmap"
+                ) as mock_semantic:
+                    for mocked in (
+                        mock_agreement,
+                        mock_pairs,
+                        mock_clusters,
+                        mock_network,
+                        mock_semantic,
+                    ):
+                        mocked.return_value = (unittest.mock.MagicMock(), unittest.mock.MagicMock())
+                    self.assertEqual(artifact_command(artifact_args), 0)
+                    mock_semantic.assert_called_once()
+            finally:
+                os.chdir(cwd_before)
+
+    def test_cli_clean_results_command(self):
+        parser = build_parser()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            output_dir = temp_path / "results"
+            output_dir.mkdir()
+            (output_dir / "crossenrich_run_summary.csv").write_text("x")
+            (output_dir / "crossenrich_cluster_network.png").write_text("x")
+            (output_dir / "other_prefix_file.txt").write_text("x")
+
+            cwd_before = Path.cwd()
+            try:
+                os.chdir(temp_dir)
+                use_args = parser.parse_args(
+                    [
+                        "use-gmt",
+                        str(temp_path / "toy.gmt"),
+                    ]
+                )
+                (temp_path / "toy.gmt").write_text(
+                    "HALLMARK_OXIDATIVE_PHOSPHORYLATION\tdesc\tTP53\n"
+                )
+                standardized = standardize_results_frame(self.results)
+                results_by_source = {
+                    "KEGG": standardized[standardized["canonical_source"] == "KEGG"].copy(),
+                    "REAC": standardized[standardized["canonical_source"] == "REAC"].copy(),
+                }
+                clustered = pd.DataFrame(
+                    [
+                        {
+                            "canonical_source": "KEGG",
+                            "name": "Apoptosis",
+                            "standardized_name": "apoptosis",
+                            "cluster_id": 0,
+                            "cluster_label": "cell death",
+                            "semantic_similarity_max": 0.8,
+                            "intersection_genes": ("TP53", "BAX", "CASP3"),
+                        },
+                        {
+                            "canonical_source": "REAC",
+                            "name": "Programmed cell death",
+                            "standardized_name": "programmed cell death",
+                            "cluster_id": 0,
+                            "cluster_label": "cell death",
+                            "semantic_similarity_max": 0.8,
+                            "intersection_genes": ("TP53", "BAX", "CASP3"),
+                        },
+                    ]
+                )
+                matrix = pd.DataFrame(
+                    [[1.0, 0.6], [0.6, 1.0]],
+                    index=["KEGG", "REAC"],
+                    columns=["KEGG", "REAC"],
+                )
+                semantic_matrix = pd.DataFrame(
+                    [[1.0, 0.7], [0.7, 1.0]],
+                    index=[0, 1],
+                    columns=[0, 1],
+                )
+                fake_outputs = CrossEnrichOutputs(
+                    standardized_results=standardized,
+                    results_by_source=results_by_source,
+                    term_jaccard_matrix=matrix,
+                    gene_jaccard_matrix=matrix,
+                    spearman_matrix=matrix,
+                    semantic_similarity_matrix=semantic_matrix,
+                    clustered_terms=clustered,
+                    cluster_consistency_matrix=matrix,
+                    cluster_consistency_validation={"is_valid": True},
+                    cluster_summary={
+                        "term_count": 2,
+                        "cluster_count": 1,
+                        "singleton_cluster_count": 0,
+                        "multi_source_cluster_count": 1,
+                        "mean_cluster_size": 2.0,
+                    },
+                    semantic_minus_gene_matrix=matrix,
+                )
+                with patch(
+                    "crossenrich.cli._run_enrichment_from_genes",
+                    return_value=self.results,
+                ), patch(
+                    "crossenrich.cli.run_crossenrich_pipeline",
+                    return_value=fake_outputs,
+                ):
+                    self.assertEqual(use_gmt_command(use_args), 0)
+
+                clean_args = parser.parse_args(["clean-results"])
+                self.assertEqual(clean_results_command(clean_args), 0)
+                self.assertFalse((output_dir / "crossenrich_run_summary.csv").exists())
+                self.assertFalse((output_dir / "crossenrich_cluster_network.png").exists())
+                self.assertTrue((output_dir / "other_prefix_file.txt").exists())
+
+                clean_all_args = parser.parse_args(["clean-results", "--all"])
+                self.assertEqual(clean_results_command(clean_all_args), 0)
+                self.assertFalse((output_dir / "other_prefix_file.txt").exists())
+            finally:
+                os.chdir(cwd_before)
 
 
 if __name__ == "__main__":

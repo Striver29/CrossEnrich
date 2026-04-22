@@ -76,6 +76,24 @@ top_clusters = extract_top_consensus_clusters(outputs.clustered_terms, top_n=10)
 saved_paths = save_default_visuals(outputs, "results")
 ```
 
+CLI example:
+
+```bash
+crossenrich use-gmt notebooks/HALLMARK_OXIDATIVE_PHOSPHORYLATION.v2026.1.Hs.gmt --gene-set-name HALLMARK_OXIDATIVE_PHOSPHORYLATION
+crossenrich all
+crossenrich all-visuals
+crossenrich run-summary
+crossenrich pair-summary
+crossenrich cluster-network
+crossenrich semantic-similarity-plot
+crossenrich selected-source-network --network-sources KEGG REAC
+crossenrich all --output-dir custom_results --prefix oxphos_demo
+crossenrich status
+crossenrich clean-results
+crossenrich clean-results --all
+crossenrich clear
+```
+
 Run tests with:
 
 ```bash
@@ -84,5 +102,4 @@ python3 -m unittest discover -s tests -v
 
 ## Remaining work
 
-- finalize the CLI wrapper around the package workflow
 - add one or two polished biological cluster case studies to the final report

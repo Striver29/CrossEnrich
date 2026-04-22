@@ -1,0 +1,10 @@
+{
+  "mode": "gmt",
+  "output_dir": "results",
+  "prefix": "crossenrich",
+  "sources": null,
+  "threshold": null,
+  "input": "/Users/ranaezzeddine/Desktop/CrossEnrich/notebooks/HALLMARK_OXIDATIVE_PHOSPHORYLATION.v2026.1.Hs.gmt",
+  "gene_set_name": "HALLMARK_OXIDATIVE_PHOSPHORYLATION",
+  "organism": "hsapiens"
+}
