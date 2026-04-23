@@ -94,6 +94,68 @@ crossenrich clean-results --all
 crossenrich clear
 ```
 
+## CLI Glossary
+
+### Setup and state
+
+| Command | What it does | Notes |
+| --- | --- | --- |
+| `crossenrich use-gmt <gmt_path>` | Sets a GMT file as the active input, runs enrichment, runs the CrossEnrich pipeline once, and caches the outputs for later fast commands. | Use `--gene-set-name` when the GMT contains more than one set. |
+| `crossenrich use-results <results_file>` | Sets an enrichment-results CSV/TSV as the active input, runs the CrossEnrich pipeline once, and caches the outputs. | Use when you already have g:Profiler results. |
+| `crossenrich status` | Shows the currently active input configuration. | Includes input path, output directory, prefix, and gene set name if applicable. |
+| `crossenrich clear` | Clears the active input state and cached outputs. | Use this before switching contexts if you want a clean reset. |
+
+### Main generation commands
+
+These commands use the active cached input created by `use-gmt` or `use-results`.
+
+| Command | What it saves | Notes |
+| --- | --- | --- |
+| `crossenrich all` | The full default output bundle: standard summary CSVs and standard PNG visuals. | This is the normal “generate everything” command. |
+| `crossenrich all-visuals` | All implemented visuals from `visuals.py` as PNGs. | Includes the semantic similarity plot. |
+| `crossenrich run-summary` | Only the run summary CSV. | Compact one-row overview of the current run. |
+| `crossenrich pair-summary` | Only the database-pair summary CSV. | One row per database pair. |
+| `crossenrich consensus-table` | Only the top consensus clusters CSV. | Shared biological themes across sources. |
+| `crossenrich source-specific` | Only the source-specific clusters CSV. | Source-unique biological themes. |
+| `crossenrich cluster-network-nodes` | Only the overall cluster-network node summary CSV. | Table version of the overall network. |
+| `crossenrich selected-network-nodes --network-sources <A> <B> [...]` | Only the selected-source network node summary CSV. | Requires `--network-sources`. |
+| `crossenrich clustered-terms` | Only the clustered terms CSV. | Full clustered term membership table. |
+| `crossenrich cluster-consistency-matrix` | Only the cluster-consistency matrix CSV. | Semantic cluster overlap across databases. |
+| `crossenrich term-jaccard-matrix` | Only the direct term-overlap matrix CSV. | Exact term-name overlap. |
+| `crossenrich gene-jaccard-matrix` | Only the gene-level Jaccard matrix CSV. | Gene-support overlap. |
+| `crossenrich spearman-matrix` | Only the Spearman matrix CSV. | Rank correlation across sources. |
+| `crossenrich semantic-similarity-matrix` | Only the semantic similarity matrix CSV. | Raw term-term semantic matrix as data. |
+
+### Visual generation commands
+
+| Command | What it saves | Notes |
+| --- | --- | --- |
+| `crossenrich database-agreement-panels` | `*_database_agreement_panels.png` | 2x2 panel of direct overlap, gene Jaccard, Spearman, and semantic consistency. |
+| `crossenrich source-pair-ranking` | `*_source_pair_ranking.png` | Ranked source-pair semantic agreement plot. |
+| `crossenrich consensus-plot` | `*_top_consensus_clusters.png` | Top shared cluster/themes plot. |
+| `crossenrich cluster-network` | `*_cluster_network.png` | Overall cluster-level network. |
+| `crossenrich semantic-similarity-plot` | `*_semantic_similarity_plot.png` | Semantic similarity heatmap as a PNG. |
+| `crossenrich selected-source-network --network-sources <A> <B> [...]` | `*_selected_source_network.png` | Focused pairwise or multi-source cluster network. |
+
+### Output overrides
+
+These work with generation commands such as `all`, `cluster-network`, or `semantic-similarity-plot`.
+
+| Option | What it does |
+| --- | --- |
+| `--output-dir <dir>` | Save outputs in a different folder instead of the active/default `results/` folder. |
+| `--prefix <name>` | Save outputs with a custom filename prefix instead of the active/default `crossenrich`. |
+| `--network-sources <A> <B> [...]` | Required for selected-source network commands and selected network node summaries. |
+
+### Cleanup
+
+| Command | What it does | Notes |
+| --- | --- | --- |
+| `crossenrich clean-results` | Deletes generated files for the current active prefix in the active output directory. | Safe default cleanup. |
+| `crossenrich clean-results --prefix <name>` | Deletes generated files for a specific prefix. | Useful when you used a custom prefix. |
+| `crossenrich clean-results --output-dir <dir>` | Deletes generated files in a different output directory. | Targets a non-default folder. |
+| `crossenrich clean-results --all` | Deletes everything inside the active output directory. | Use with care. |
+
 Run tests with:
 
 ```bash
