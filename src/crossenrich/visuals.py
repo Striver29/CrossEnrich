@@ -84,10 +84,15 @@ def plot_top_consensus_clusters(
     clustered_terms: pd.DataFrame,
     *,
     top_n: int = 10,
+    min_term_count: int = 1,
     figsize: tuple[float, float] = (10.0, 6.0),
 ):
     """Visualize the largest multi-source clusters as shared biological themes."""
-    summary = extract_top_consensus_clusters(clustered_terms, top_n=top_n)
+    summary = extract_top_consensus_clusters(
+        clustered_terms,
+        top_n=top_n,
+        min_term_count=min_term_count,
+    )
     figure, axis = plt.subplots(figsize=figsize)
 
     if summary.empty:

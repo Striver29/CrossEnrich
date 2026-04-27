@@ -160,8 +160,3 @@ Run tests with:
 
 ```bash
 python3 -m unittest discover -s tests -v
-```
-
-## Remaining work
-
-- add one or two polished biological cluster case studies to the final report

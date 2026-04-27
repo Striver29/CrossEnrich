@@ -113,6 +113,7 @@ def extract_top_consensus_clusters(
     *,
     top_n: int = 10,
     min_sources: int = 2,
+    min_term_count: int = 1,
 ) -> pd.DataFrame:
     """Summarize the strongest multi-source clusters as candidate shared themes."""
     required = {"cluster_id", "cluster_label", "canonical_source", "name"}
@@ -127,6 +128,8 @@ def extract_top_consensus_clusters(
         source_count = len(source_names)
         # Consensus themes should be supported by more than one source.
         if source_count < min_sources:
+            continue
+        if len(cluster_frame) < min_term_count:
             continue
 
         if "p_value" in cluster_frame.columns:
