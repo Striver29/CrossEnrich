@@ -169,10 +169,17 @@ def _cluster_label(cluster_frame: pd.DataFrame) -> str:
 def build_semantic_similarity_matrix(
     standardized: pd.DataFrame,
     *,
+<<<<<<< Updated upstream
     token_weight: float = DEFAULT_TOKEN_WEIGHT,
     gene_weight: float = DEFAULT_GENE_WEIGHT,
     lexical_weight: float = DEFAULT_LEXICAL_WEIGHT,
     semantic_weight: float = DEFAULT_SEMANTIC_WEIGHT,
+=======
+    token_weight: float = 0.35,
+    gene_weight: float = 0.10,
+    lexical_weight: float = 0.15,
+    semantic_weight: float = 0.35,
+>>>>>>> Stashed changes
     cross_source_only: bool = True,
 ) -> pd.DataFrame:
     similarity = pd.DataFrame(
